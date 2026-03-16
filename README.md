@@ -1,8 +1,33 @@
-# Traffic Agent 🚦
-### YOLO Detection × ChromaDB RAG × Phi-3 Mini (Local SLM)
+# 🚦 TrafficAgent-AI
 
-A full-stack autonomous driving analysis application.  
-Upload traffic images or run batch analysis on BDD100K — get real-time risk assessments powered entirely by local AI.
+## Real-Time Autonomous Traffic Analysis Powered by YOLO & RAG
+
+![Status](https://img.shields.io/badge/Project%20Status-Active-brightgreen)
+![License](https://img.shields.io/badge/License-MIT-blue)
+![Version](https://img.shields.io/badge/Version-1.0.0-blue)
+
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.135-009688?logo=fastapi&logoColor=white)
+![YOLO](https://img.shields.io/badge/YOLO-v11-FF6B35?logoColor=white)
+![ChromaDB](https://img.shields.io/badge/ChromaDB-1.5-FF4B4B?logoColor=white)
+![Ollama](https://img.shields.io/badge/Ollama-Phi--3%20Mini-black?logo=ollama&logoColor=white)
+![Phi3](https://img.shields.io/badge/Phi--3-Mini%203.8B-blueviolet)
+
+**An intelligent, autonomous traffic scene analyzer with real-time object detection, RAG-powered rule retrieval, and local AI reasoning for safety risk assessment.**
+
+[Features](#features) • [Architecture](#architecture) • [Installation](#installation) • [Usage](#usage) • [API](#api)
+
+---
+
+## Features
+
+- Real-time object detection using YOLOv11-nano
+- ChromaDB RAG pipeline searches 18 traffic rules instantly
+- Phi-3 Mini runs 100% locally — no internet needed for AI
+- Live dashboard with risk levels: LOW / MEDIUM / HIGH / CRITICAL
+- Batch processing support for BDD100K dataset
+- Server Sent Events for real-time progress streaming
+- Full REST API with FastAPI backend
 
 ---
 
@@ -10,151 +35,208 @@ Upload traffic images or run batch analysis on BDD100K — get real-time risk as
 
 ```
 Image Input
-    │
-    ▼
-[YOLO11n]  ──→  Object detections (labels + bounding boxes)
-    │
-    ▼
-[ChromaDB RAG]  ──→  Top-3 relevant traffic rules (sentence-transformers embeddings)
-    │
-    ▼
-[Phi-3 Mini via Ollama]  ──→  Scene reasoning + recommended action + risk level
-    │
-    ▼
-FastAPI backend  ──→  Web dashboard (real-time SSE streaming)
+    |
+    v
+[YOLOv11-nano] ---------> Detects objects (car, person, bus, traffic light)
+    |
+    v
+[ChromaDB RAG] ----------> Finds top 3 relevant traffic rules
+    |
+    v
+[Phi-3 Mini via Ollama] --> Reasons about scene, gives action + risk level
+    |
+    v
+[FastAPI + Dashboard] ----> Real-time results in browser
 ```
 
 ---
 
-## Prerequisites
+## Installation
 
-| Tool | Install |
-|------|---------|
-| Python 3.10+ | https://python.org |
-| Ollama | https://ollama.com/download |
-| Git (optional) | https://git-scm.com |
+### Prerequisites
 
----
+| Tool | Version | Download |
+|------|---------|----------|
+| Python | 3.10+ | https://python.org |
+| Ollama | Latest | https://ollama.com/download |
+| Git | Latest | https://git-scm.com |
 
-## Quick Start
+### Setup
 
-### macOS / Linux
+**Step 1 - Clone the repo**
 ```bash
-bash run.sh
+git clone https://github.com/adityawadhwani03/TrafficAgent-AI.git
+cd TrafficAgent-AI
 ```
 
-### Windows
+**Step 2 - Create virtual environment**
+```bash
+python -m venv .venv
 ```
-Double-click run.bat
-```
-Or from Command Prompt:
+
+**Step 3 - Activate it**
+
+Windows:
 ```cmd
-run.bat
+.venv\Scripts\activate
 ```
-
-The script will:
-1. Create a Python virtual environment
-2. Install all dependencies
-3. Pull `phi3:mini` from Ollama (first run, ~2.3GB)
-4. Start the server at **http://localhost:8000**
-
----
-
-## Manual Setup
-
+Mac/Linux:
 ```bash
-# 1. Create and activate virtualenv
-python3 -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Pull the SLM
-ollama pull phi3:mini
-
-# 4. Start the server
-uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+source .venv/bin/activate
 ```
 
-Open http://localhost:8000
+**Step 4 - Install dependencies**
+```bash
+pip install -r requirements.txt
+```
+
+**Step 5 - Pull the AI model**
+```bash
+ollama pull phi3:mini
+```
+
+**Step 6 - Run the app**
+```bash
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
+```
+
+**Step 7 - Open in browser**
+```
+http://localhost:8000
+```
 
 ---
 
-## Using the App
+## Usage
 
 ### Upload Mode
-- Drag & drop any JPG/PNG traffic images onto the upload zone
-- Or click to browse files
-- Results appear instantly in the dashboard
+1. Drag and drop any traffic image onto the upload zone
+2. Wait 15 to 30 seconds for AI analysis
+3. Result card appears with risk level and recommended action
+4. Click any card to see full detailed breakdown
 
 ### BDD100K Batch Mode
-1. Download BDD100K from https://bdd-data.berkeley.edu/
-2. Enter the path to your val images directory (e.g. `./bdd100k/images/100k/val`)
-3. Set max images (default 20)
-4. Click **▶ Run Batch** — watch live progress stream
-
-### Results Dashboard
-- Click any result card to see full analysis:
-  - Scene description
-  - Step-by-step agent reasoning
-  - Retrieved traffic rules with relevance scores
-  - All YOLO detections with confidence
-- Risk levels: **LOW** / **MEDIUM** / **HIGH** / **CRITICAL**
-- Live log panel shows real-time processing output
+1. Download BDD100K from https://bdd-data.berkeley.edu
+2. Enter the path to your images folder
+3. Set how many images to process
+4. Click RUN BATCH and watch live progress
 
 ---
 
-## Configuration
-
-Edit `backend/main.py` to change defaults:
-
-```python
-SLM_MODEL    = "phi3:mini"    # or "mistral", "llama3.2", etc.
-YOLO_MODEL   = "yolo11n.pt"   # yolo11s.pt / yolo11m.pt for more accuracy
-CONF_THRESH  = 0.35           # YOLO confidence threshold
-```
-
----
-
-## API Endpoints
+## API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET`  | `/`           | Web dashboard |
-| `GET`  | `/status`     | System health check |
-| `POST` | `/analyze`    | Upload + analyze image(s) |
-| `POST` | `/analyze/bdd100k` | Start batch job |
-| `GET`  | `/stream/{job_id}` | SSE live progress |
-| `GET`  | `/results`    | List all past results |
-| `DELETE` | `/results`  | Clear all results |
-
----
-
-## Models Used
-
-| Component | Model | Size | Purpose |
-|-----------|-------|------|---------|
-| Object Detection | YOLOv11-nano | ~6MB | Fast, real-time detection |
-| Embeddings | all-MiniLM-L6-v2 | ~80MB | Traffic rules RAG |
-| SLM Reasoning | Phi-3 Mini | ~2.3GB | Scene understanding + decisions |
+| GET | / | Web dashboard |
+| GET | /status | System health check |
+| POST | /analyze | Upload and analyze images |
+| POST | /analyze/bdd100k | Start batch job |
+| GET | /stream/{job_id} | Live SSE progress stream |
+| GET | /results | List all past results |
+| DELETE | /results | Clear all results |
 
 ---
 
 ## Output Format
 
-Results saved to `results/` as JSON:
 ```json
 {
   "id": "a1b2c3d4",
-  "image": "frame_001.jpg",
-  "detections": [{"label": "car", "confidence": 0.87, "box": [...]}],
-  "rules_retrieved": [{"rule": "...", "category": "vehicle", "relevance": 0.91}],
-  "scene_description": "...",
-  "agent_reasoning": "...",
-  "recommended_action": "Maintain safe following distance and prepare to brake.",
-  "risk_level": "MEDIUM",
-  "latency_ms": 1847,
-  "timestamp": "2026-03-16T14:23:01"
+  "image": "traffic_photo.jpg",
+  "detections": [
+    {"label": "car", "confidence": 0.87},
+    {"label": "person", "confidence": 0.76}
+  ],
+  "rules_retrieved": [
+    {
+      "rule": "Yield to pedestrians in crosswalks",
+      "category": "pedestrian",
+      "relevance": 0.91
+    }
+  ],
+  "scene_description": "A busy intersection with vehicles and a pedestrian.",
+  "agent_reasoning": "Step 1: Pedestrian detected near crosswalk...",
+  "recommended_action": "Slow down and yield to pedestrian in crosswalk.",
+  "risk_level": "HIGH",
+  "latency_ms": 18500,
+  "timestamp": "2026-03-17T01:43:14"
 }
 ```
+
+---
+
+## Models
+
+| Model | Size | Purpose |
+|-------|------|---------|
+| YOLOv11-nano | 6 MB | Fast object detection |
+| all-MiniLM-L6-v2 | 80 MB | Text embeddings for rule search |
+| Phi-3 Mini | 2.3 GB | Local AI reasoning |
+
+---
+
+## Project Structure
+
+```
+TrafficAgent-AI/
+    backend/
+        __init__.py
+        main.py
+    static/
+        index.html
+    uploads/
+    results/
+    requirements.txt
+    run.bat
+    run.sh
+    README.md
+```
+
+---
+
+## Share Your App Online
+
+```cmd
+winget install Ngrok.Ngrok
+ngrok config add-authtoken YOUR_TOKEN
+ngrok http 8000
+```
+
+You get a public link like `https://abc123.ngrok-free.app` that anyone can open!
+
+---
+
+## What I Learned
+
+- How YOLO object detection works in real traffic scenes
+- How RAG pipelines work with ChromaDB vector search
+- How to run local Small Language Models with Ollama
+- How to build a FastAPI backend with Server Sent Events
+- How to build and deploy a full-stack AI application
+
+---
+
+## Future Improvements
+
+- Add video file support
+- Add GPS coordinates to results
+- Email alerts for CRITICAL risk detections
+- Train YOLO on BDD100K for better traffic accuracy
+- Support for Mistral and LLaMA models
+
+---
+
+## License
+
+MIT License — free to use for learning and building!
+
+---
+
+## Author
+
+**Aditya Wadhwani**
+
+[![GitHub](https://img.shields.io/badge/GitHub-adityawadhwani03-black?logo=github)](https://github.com/adityawadhwani03)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Aditya%20Wadhwani-0077B5?logo=linkedin)](https://linkedin.com/in/adityawadhwani03)
+
+> Built as a fresher AI project | Stack: Python, FastAPI, YOLO, ChromaDB, Ollama, Phi-3 Mini
