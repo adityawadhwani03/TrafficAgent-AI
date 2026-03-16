@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traffic Agent — YOLO × RAG × Phi-3</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow:wght@300;400;600;700;900&family=Barlow+Condensed:wght@700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #080c10;
+  --bg2:       #0d1319;
+  --bg3:       #131b24;
+  --border:    #1e2d3d;
+  --accent:    #00e5ff;
+  --accent2:   #ff6b35;
+  --green:     #39ff14;
+  --yellow:    #ffd60a;
+  --red:       #ff2d55;
+  --text:      #c8d8e8;
+  --muted:     #4a6070;
+  --low:       #39ff14;
+  --medium:    #ffd60a;
+  --high:      #ff6b35;
+  --critical:  #ff2d55;
+  --unknown:   #4a6070;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Barlow', sans-serif;
+  font-weight: 400;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Scanline overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px);
+  pointer-events: none;
+  z-index: 1000;
+}
+
+/* ─── Header ─────────────────── */
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2rem;
+  height: 56px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.logo-icon {
+  width: 32px; height: 32px;
+  background: var(--accent);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+  display: flex; align-items: center; justify-content: center;
+  animation: pulse-hex 3s ease-in-out infinite;
+}
+@keyframes pulse-hex {
+  0%,100% { box-shadow: 0 0 0 0 rgba(0,229,255,0.4); }
+  50%      { box-shadow: 0 0 0 8px rgba(0,229,255,0); }
+}
+.logo-text {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 1.3rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.logo-text span { color: var(--accent); }
+
+.status-bar {
+  display: flex;
+  gap: 1.5rem;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.72rem;
+}
+.status-item { display: flex; align-items: center; gap: 6px; }
+.dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--muted);
+  transition: background 0.3s;
+}
+.dot.ok   { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.dot.fail { background: var(--red); }
+
+/* ─── Layout ─────────────────── */
+.app {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  grid-template-rows: auto 1fr;
+  min-height: calc(100vh - 56px);
+}
+
+/* ─── Sidebar ─────────────────── */
+aside {
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.panel {
+  border-bottom: 1px solid var(--border);
+  padding: 1.25rem 1.5rem;
+}
+.panel-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel-title::before {
+  content: '';
+  width: 3px; height: 12px;
+  background: var(--accent);
+  display: block;
+}
+
+/* ─── Upload Zone ─────────────── */
+.upload-zone {
+  border: 1.5px dashed var(--border);
+  border-radius: 4px;
+  padding: 1.5rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+.upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(0,229,255,0.04); }
+.upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.upload-icon { font-size: 2rem; opacity: 0.4; margin-bottom: 0.5rem; }
+.upload-text { font-size: 0.8rem; color: var(--muted); line-height: 1.6; }
+.upload-text strong { color: var(--accent); display: block; font-size: 0.85rem; }
+
+/* ─── BDD100K panel ───────────── */
+.field { margin-bottom: 0.75rem; }
+.field label {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.4rem;
+  font-family: 'Share Tech Mono', monospace;
+}
+.field input[type="text"], .field input[type="number"] {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.5rem 0.75rem;
+  border-radius: 3px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.78rem;
+  transition: border-color 0.2s;
+}
+.field input:focus { outline: none; border-color: var(--accent); }
+
+.btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-top: 0.5rem;
+}
+.btn:hover { background: var(--accent); color: var(--bg); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn.danger { border-color: var(--red); color: var(--red); }
+.btn.danger:hover { background: var(--red); color: #fff; }
+
+/* ─── Progress ───────────────── */
+.progress-wrap { display: none; margin-top: 1rem; }
+.progress-wrap.active { display: block; }
+.progress-bar-bg {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  width: 0%;
+  transition: width 0.3s;
+  box-shadow: 0 0 8px var(--accent);
+}
+.progress-text {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+/* ─── Stats ──────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+.stat-card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.75rem;
+  text-align: center;
+}
+.stat-value {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 1.6rem;
+  line-height: 1;
+  color: #fff;
+}
+.stat-label {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-top: 0.3rem;
+  font-family: 'Share Tech Mono', monospace;
+}
+
+/* ─── Risk bars ──────────────── */
+.risk-bars { display: flex; flex-direction: column; gap: 0.5rem; }
+.risk-row { display: flex; align-items: center; gap: 0.75rem; font-size: 0.75rem; }
+.risk-label {
+  width: 60px;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.68rem;
+}
+.risk-track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.risk-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+.risk-count { width: 24px; text-align: right; color: var(--muted); font-family: 'Share Tech Mono', monospace; font-size: 0.68rem; }
+
+/* ─── Main content ───────────── */
+main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ─── Tabs ───────────────────── */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+}
+.tab {
+  padding: 0.85rem 1.5rem;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.8rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 0.65rem;
+  width: 18px; height: 18px;
+  border-radius: 2px;
+  margin-left: 6px;
+}
+
+/* ─── Results grid ───────────── */
+.results-pane {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 60%;
+  color: var(--muted);
+  text-align: center;
+  gap: 1rem;
+}
+.empty-icon { font-size: 3rem; opacity: 0.3; }
+.empty-text { font-size: 0.85rem; line-height: 1.8; }
+
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 1rem;
+}
+
+/* ─── Result Card ────────────── */
+.result-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  transition: transform 0.2s, border-color 0.2s;
+  animation: slide-in 0.3s ease;
+  cursor: pointer;
+}
+@keyframes slide-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.result-card:hover { transform: translateY(-2px); border-color: var(--accent); }
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg3);
+}
+.card-filename {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.risk-badge {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  padding: 3px 8px;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+.risk-badge.LOW      { background: rgba(57,255,20,0.12);  color: var(--low);      border: 1px solid rgba(57,255,20,0.3); }
+.risk-badge.MEDIUM   { background: rgba(255,214,10,0.12); color: var(--medium);   border: 1px solid rgba(255,214,10,0.3); }
+.risk-badge.HIGH     { background: rgba(255,107,53,0.12); color: var(--high);     border: 1px solid rgba(255,107,53,0.3); }
+.risk-badge.CRITICAL { background: rgba(255,45,85,0.15);  color: var(--critical); border: 1px solid rgba(255,45,85,0.4);
+                       animation: blink 1s ease-in-out infinite; }
+.risk-badge.UNKNOWN  { background: rgba(74,96,112,0.2);   color: var(--unknown);  border: 1px solid rgba(74,96,112,0.3); }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+.card-body { padding: 1rem; }
+
+.card-action {
+  font-size: 0.85rem;
+  color: #fff;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+.detections-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 0.75rem;
+}
+.det-tag {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  padding: 2px 7px;
+  border-radius: 2px;
+  color: var(--muted);
+}
+
+.card-meta {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.65rem;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  margin-top: 0.6rem;
+}
+
+/* ─── Detail modal ───────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.8);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+
+.modal {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: 100%;
+  max-width: 720px;
+  max-height: 80vh;
+  overflow-y: auto;
+  transform: scale(0.95);
+  transition: transform 0.2s;
+}
+.modal-overlay.open .modal { transform: scale(1); }
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg3);
+  position: sticky;
+  top: 0;
+}
+.modal-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #fff;
+}
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1.3rem;
+  line-height: 1;
+  padding: 4px 8px;
+  transition: color 0.2s;
+}
+.modal-close:hover { color: #fff; }
+
+.modal-body { padding: 1.5rem; }
+
+.modal-section { margin-bottom: 1.5rem; }
+.modal-section-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.modal-section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.modal-text {
+  font-size: 0.87rem;
+  line-height: 1.7;
+  color: var(--text);
+}
+.mono-text {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.78rem;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  padding: 0.75rem 1rem;
+  border-radius: 3px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  color: var(--accent);
+}
+
+.rules-list { display: flex; flex-direction: column; gap: 0.5rem; }
+.rule-item {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent2);
+  padding: 0.75rem 1rem;
+  border-radius: 0 3px 3px 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+.rule-cat {
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.62rem;
+  color: var(--accent2);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.3rem;
+}
+
+/* ─── Live log ───────────────── */
+.log-pane {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  padding: 1.5rem;
+  overflow: hidden;
+}
+.log-pane.active { display: flex; }
+.log-terminal {
+  flex: 1;
+  background: #04070a;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1rem;
+  overflow-y: auto;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 0.75rem;
+  line-height: 1.8;
+}
+.log-line { display: flex; gap: 0.75rem; }
+.log-time { color: var(--muted); flex-shrink: 0; }
+.log-msg.info    { color: var(--text); }
+.log-msg.success { color: var(--green); }
+.log-msg.warn    { color: var(--yellow); }
+.log-msg.error   { color: var(--red); }
+
+/* ─── Scrollbar ──────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon"></div>
+    <div class="logo-text">Traffic<span>Agent</span></div>
+  </div>
+  <div class="status-bar">
+    <div class="status-item"><div class="dot" id="dot-yolo"></div><span>YOLO</span></div>
+    <div class="status-item"><div class="dot" id="dot-chroma"></div><span>ChromaDB</span></div>
+    <div class="status-item"><div class="dot" id="dot-ollama"></div><span>Ollama</span></div>
+    <div class="status-item" style="color: var(--muted); font-size:0.7rem;" id="slm-label">—</div>
+  </div>
+</header>
+
+<div class="app">
+  <!-- ─── Sidebar ───────────────── -->
+  <aside>
+
+    <!-- Upload -->
+    <div class="panel">
+      <div class="panel-title">Upload Images</div>
+      <div class="upload-zone" id="upload-zone">
+        <input type="file" id="file-input" multiple accept="image/*">
+        <div class="upload-icon">⬆</div>
+        <div class="upload-text">
+          <strong>Drop images here</strong>
+          JPG / PNG from any source<br>
+          or click to browse
+        </div>
+      </div>
+      <div class="progress-wrap" id="upload-progress">
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="upload-bar"></div></div>
+        <div class="progress-text" id="upload-status">Analyzing…</div>
+      </div>
+    </div>
+
+    <!-- BDD100K -->
+    <div class="panel">
+      <div class="panel-title">BDD100K Batch</div>
+      <div class="field">
+        <label>Directory path</label>
+        <input type="text" id="bdd-dir" placeholder="./bdd100k/images/100k/val">
+      </div>
+      <div class="field">
+        <label>Max images</label>
+        <input type="number" id="bdd-max" value="20" min="1" max="500">
+      </div>
+      <button class="btn" id="bdd-btn" onclick="runBDD()">▶ Run Batch</button>
+      <div class="progress-wrap" id="bdd-progress">
+        <div class="progress-bar-bg"><div class="progress-bar-fill" id="bdd-bar"></div></div>
+        <div class="progress-text" id="bdd-status">Starting…</div>
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="panel">
+      <div class="panel-title">Session Stats</div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-value" id="stat-total">0</div>
+          <div class="stat-label">Analyzed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-latency">—</div>
+          <div class="stat-label">Avg ms</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-detections">0</div>
+          <div class="stat-label">Detections</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value" id="stat-critical">0</div>
+          <div class="stat-label" style="color: var(--red)">Critical</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Risk distribution -->
+    <div class="panel">
+      <div class="panel-title">Risk Distribution</div>
+      <div class="risk-bars">
+        <div class="risk-row">
+          <span class="risk-label" style="color:var(--critical)">CRITICAL</span>
+          <div class="risk-track"><div class="risk-fill" id="bar-critical" style="background:var(--critical);width:0%"></div></div>
+          <span class="risk-count" id="cnt-critical">0</span>
+        </div>
+        <div class="risk-row">
+          <span class="risk-label" style="color:var(--high)">HIGH</span>
+          <div class="risk-track"><div class="risk-fill" id="bar-high" style="background:var(--high);width:0%"></div></div>
+          <span class="risk-count" id="cnt-high">0</span>
+        </div>
+        <div class="risk-row">
+          <span class="risk-label" style="color:var(--medium)">MEDIUM</span>
+          <div class="risk-track"><div class="risk-fill" id="bar-medium" style="background:var(--medium);width:0%"></div></div>
+          <span class="risk-count" id="cnt-medium">0</span>
+        </div>
+        <div class="risk-row">
+          <span class="risk-label" style="color:var(--low)">LOW</span>
+          <div class="risk-track"><div class="risk-fill" id="bar-low" style="background:var(--low);width:0%"></div></div>
+          <span class="risk-count" id="cnt-low">0</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Clear -->
+    <div class="panel" style="border-bottom:none">
+      <button class="btn danger" onclick="clearResults()">✕ Clear All Results</button>
+    </div>
+
+  </aside>
+
+  <!-- ─── Main ──────────────────── -->
+  <main>
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('results', this)">
+        Results <span class="tab-badge" id="tab-count">0</span>
+      </div>
+      <div class="tab" onclick="switchTab('log', this)">Live Log</div>
+    </div>
+
+    <div class="results-pane" id="pane-results">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">◈</div>
+        <div class="empty-text">
+          No analyses yet.<br>
+          Upload an image or run a BDD100K batch<br>to see results here.
+        </div>
+      </div>
+      <div class="results-grid" id="results-grid"></div>
+    </div>
+
+    <div class="log-pane" id="pane-log">
+      <div class="log-terminal" id="log-terminal">
+        <div class="log-line">
+          <span class="log-time">00:00:00</span>
+          <span class="log-msg info">Traffic Agent initialized. Waiting for input…</span>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- ─── Detail Modal ──────────── -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Scene Analysis</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+// ─── State ────────────────────────────────────
+const allResults = [];
+const riskCounts = { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0, UNKNOWN: 0 };
+let totalLatency = 0;
+let totalDetections = 0;
+
+// ─── Status check ─────────────────────────────
+async function checkStatus() {
+  try {
+    const r = await fetch('/status');
+    const s = await r.json();
+    setDot('dot-yolo',   s.yolo);
+    setDot('dot-chroma', s.chroma);
+    setDot('dot-ollama', s.ollama);
+    document.getElementById('slm-label').textContent = s.slm || '—';
+  } catch(e) {}
+}
+function setDot(id, ok) {
+  const d = document.getElementById(id);
+  d.className = 'dot ' + (ok ? 'ok' : 'fail');
+}
+checkStatus();
+setInterval(checkStatus, 10000);
+
+// ─── Load existing results ─────────────────────
+async function loadResults() {
+  try {
+    const r = await fetch('/results');
+    const d = await r.json();
+    d.results.forEach(addResult);
+  } catch(e) {}
+}
+loadResults();
+
+// ─── Tabs ─────────────────────────────────────
+function switchTab(name, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('pane-results').style.display = name === 'results' ? 'block' : 'none';
+  document.getElementById('pane-log').classList.toggle('active', name === 'log');
+}
+
+// ─── File Upload ───────────────────────────────
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('drag'));
+zone.addEventListener('drop', e => {
+  e.preventDefault();
+  zone.classList.remove('drag');
+  handleFiles(e.dataTransfer.files);
+});
+document.getElementById('file-input').addEventListener('change', e => handleFiles(e.target.files));
+
+async function handleFiles(fileList) {
+  if (!fileList.length) return;
+  const prog = document.getElementById('upload-progress');
+  prog.classList.add('active');
+  document.getElementById('upload-status').textContent = `Uploading ${fileList.length} image(s)…`;
+  document.getElementById('upload-bar').style.width = '20%';
+  logMsg(`Uploading ${fileList.length} image(s) for analysis…`, 'info');
+  const fd = new FormData();
+  for (const f of fileList) fd.append('files', f);
+  try {
+    document.getElementById('upload-bar').style.width = '60%';
+    const r = await fetch('/analyze', { method: 'POST', body: fd });
+    const d = await r.json();
+    document.getElementById('upload-bar').style.width = '100%';
+    document.getElementById('upload-status').textContent = `Done — ${d.results.length} analyzed`;
+    d.results.forEach(res => { addResult(res); logResult(res); });
+    setTimeout(() => { prog.classList.remove('active'); }, 2000);
+  } catch(e) {
+    document.getElementById('upload-status').textContent = 'Error: ' + e.message;
+    logMsg('Upload error: ' + e.message, 'error');
+  }
+}
+
+// ─── BDD100K Batch ─────────────────────────────
+async function runBDD() {
+  const dir = document.getElementById('bdd-dir').value.trim() || './bdd100k/images/100k/val';
+  const max = parseInt(document.getElementById('bdd-max').value) || 20;
+  const btn = document.getElementById('bdd-btn');
+  const prog = document.getElementById('bdd-progress');
+  btn.disabled = true;
+  prog.classList.add('active');
+  logMsg(`Starting BDD100K batch: ${dir} (max=${max})`, 'info');
+  const fd = new FormData();
+  fd.append('directory', dir);
+  fd.append('max_images', max);
+  try {
+    const r = await fetch('/analyze/bdd100k', { method: 'POST', body: fd });
+    const d = await r.json();
+    const jobId = d.job_id;
+    logMsg(`Job started: ${jobId}`, 'success');
+    const es = new EventSource(`/stream/${jobId}`);
+    es.onmessage = ev => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'start') {
+        document.getElementById('bdd-status').textContent = `0 / ${msg.total}`;
+        logMsg(`Processing ${msg.total} images…`, 'info');
+      } else if (msg.type === 'result') {
+        const pct = Math.round((msg.index / msg.total) * 100);
+        document.getElementById('bdd-bar').style.width = pct + '%';
+        document.getElementById('bdd-status').textContent = `${msg.index} / ${msg.total}`;
+        addResult(msg.data);
+        logResult(msg.data);
+      } else if (msg.type === 'done') {
+        document.getElementById('bdd-bar').style.width = '100%';
+        document.getElementById('bdd-status').textContent = 'Complete ✓';
+        logMsg('Batch complete.', 'success');
+        btn.disabled = false;
+        es.close();
+        setTimeout(() => prog.classList.remove('active'), 2000);
+      } else if (msg.type === 'error') {
+        document.getElementById('bdd-status').textContent = 'Error';
+        logMsg(msg.message, 'error');
+        btn.disabled = false;
+        es.close();
+      }
+    };
+    es.onerror = () => { btn.disabled = false; es.close(); };
+  } catch(e) {
+    logMsg('Batch error: ' + e.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+// ─── Add result to UI ──────────────────────────
+function addResult(res) {
+  allResults.unshift(res);
+  riskCounts[res.risk_level] = (riskCounts[res.risk_level] || 0) + 1;
+  totalLatency += res.latency_ms || 0;
+  totalDetections += (res.detections || []).length;
+  updateStats();
+  renderCard(res);
+}
+
+function updateStats() {
+  const n = allResults.length;
+  document.getElementById('stat-total').textContent = n;
+  document.getElementById('stat-latency').textContent = n ? Math.round(totalLatency / n) : '—';
+  document.getElementById('stat-detections').textContent = totalDetections;
+  document.getElementById('stat-critical').textContent = (riskCounts.CRITICAL || 0);
+  document.getElementById('tab-count').textContent = n;
+  const maxV = Math.max(...Object.values(riskCounts), 1);
+  ['critical','high','medium','low'].forEach(r => {
+    const key = r.toUpperCase();
+    const v   = riskCounts[key] || 0;
+    document.getElementById('bar-' + r).style.width = (v / maxV * 100) + '%';
+    document.getElementById('cnt-' + r).textContent = v;
+  });
+  document.getElementById('empty-state').style.display = n ? 'none' : 'flex';
+}
+
+function renderCard(res) {
+  const grid = document.getElementById('results-grid');
+  const det  = (res.detections || []);
+  const uniqueLabels = [...new Set(det.map(d => d.label))];
+  const tags = uniqueLabels.slice(0, 6).map(l => `<span class="det-tag">${l}</span>`).join('');
+  const card = document.createElement('div');
+  card.className = 'result-card';
+  card.innerHTML = `
+    <div class="card-header">
+      <span class="card-filename">${res.image || 'unknown'}</span>
+      <span class="risk-badge ${res.risk_level}">${res.risk_level}</span>
+    </div>
+    <div class="card-body">
+      <div class="card-action">${res.recommended_action || '—'}</div>
+      <div class="detections-row">${tags || '<span class="det-tag" style="color:var(--muted)">no detections</span>'}</div>
+      <div class="card-meta">
+        <span>${det.length} object${det.length !== 1 ? 's' : ''} detected</span>
+        <span>${res.latency_ms ? res.latency_ms + 'ms' : ''}</span>
+        <span>${res.timestamp ? res.timestamp.slice(11) : ''}</span>
+      </div>
+    </div>`;
+  card.onclick = () => openModal(res);
+  grid.prepend(card);
+}
+
+// ─── Modal ────────────────────────────────────
+function openModal(res) {
+  const body = document.getElementById('modal-body');
+  const det  = (res.detections || []);
+  const rules = (res.rules_retrieved || []);
+  document.getElementById('modal-title').textContent = res.image || 'Scene Analysis';
+  body.innerHTML = `
+    <div class="modal-section">
+      <div class="modal-section-title">Risk Assessment</div>
+      <span class="risk-badge ${res.risk_level}" style="font-size:0.85rem;padding:6px 14px">${res.risk_level}</span>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Scene Description</div>
+      <div class="modal-text">${res.scene_description || '—'}</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Recommended Action</div>
+      <div class="modal-text" style="color:#fff;font-weight:600">${res.recommended_action || '—'}</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Agent Reasoning</div>
+      <div class="mono-text">${res.agent_reasoning || '—'}</div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Detections (${det.length})</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${det.map(d => `<span class="det-tag" style="font-size:0.75rem;padding:4px 10px">${d.label} <span style="color:var(--accent)">${d.confidence}</span></span>`).join('') || '<span style="color:var(--muted);font-size:0.8rem">None</span>'}
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Retrieved Traffic Rules</div>
+      <div class="rules-list">
+        ${rules.map(r => `
+          <div class="rule-item">
+            <div class="rule-cat">${r.category} — relevance ${r.relevance}</div>
+            ${r.rule}
+          </div>`).join('') || '<span style="color:var(--muted);font-size:0.8rem">None</span>'}
+      </div>
+    </div>
+    <div class="modal-section">
+      <div class="modal-section-title">Meta</div>
+      <div style="display:flex;gap:2rem;font-family:'Share Tech Mono',monospace;font-size:0.72rem;color:var(--muted)">
+        <span>ID: ${res.id || '—'}</span>
+        <span>Latency: ${res.latency_ms}ms</span>
+        <span>${res.timestamp || ''}</span>
+      </div>
+    </div>`;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal(e) {
+  if (!e || e.target === document.getElementById('modal-overlay') || e.currentTarget.classList?.contains('modal-close')) {
+    document.getElementById('modal-overlay').classList.remove('open');
+  }
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(e); });
+
+// ─── Clear ────────────────────────────────────
+async function clearResults() {
+  if (!confirm('Clear all results?')) return;
+  await fetch('/results', { method: 'DELETE' });
+  allResults.length = 0;
+  Object.keys(riskCounts).forEach(k => riskCounts[k] = 0);
+  totalLatency = 0; totalDetections = 0;
+  document.getElementById('results-grid').innerHTML = '';
+  updateStats();
+  logMsg('Results cleared.', 'warn');
+}
+
+// ─── Log ──────────────────────────────────────
+function logMsg(msg, type = 'info') {
+  const t = document.getElementById('log-terminal');
+  const now = new Date().toTimeString().slice(0, 8);
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">${now}</span><span class="log-msg ${type}">${msg}</span>`;
+  t.appendChild(line);
+  t.scrollTop = t.scrollHeight;
+}
+function logResult(res) {
+  const det = (res.detections || []).length;
+  const lvl = res.risk_level;
+  const type = lvl === 'CRITICAL' ? 'error' : lvl === 'HIGH' ? 'warn' : lvl === 'MEDIUM' ? 'warn' : 'success';
+  logMsg(`[${lvl}] ${res.image} | ${det} detections | ${res.latency_ms}ms | ${res.recommended_action?.slice(0,60)}`, type);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+{
+  "id": "33d5b63a",
+  "image": "cabc9045-b3349548.jpg",
+  "detections": [
+    {
+      "label": "bus",
+      "confidence": 0.708,
+      "box": [
+        634.8,
+        145.3,
+        785.8,
+        302.3
+      ]
+    },
+    {
+      "label": "car",
+      "confidence": 0.4,
+      "box": [
+        552.5,
+        225.7,
+        606.1,
+        258.4
+      ]
+    }
+  ],
+  "rules_retrieved": [
+    {
+      "rule": "When merging or changing lanes, ensure adequate gap between vehicles. Do not cut off other drivers.",
+      "category": "vehicle",
+      "relevance": 0.388
+    },
+    {
+      "rule": "A green traffic light permits proceeding through the intersection, but you must still yield to vehicles and pedestrians already in the intersection.",
+      "category": "traffic_light",
+      "relevance": 0.386
+    },
+    {
+      "rule": "A red traffic light requires a full stop before the stop line. Do not proceed until the light turns green.",
+      "category": "traffic_light",
+      "relevance": 0.374
+    }
+  ],
+  "scene_description": "A busy urban street with multiple lanes, where vehicles are moving at varying speeds.",
+  "agent_reasoning": [
+    "The bus has a high confidence detection (0.708), indicating it is likely the larger vehicle and should be given priority due to safety concerns for passengers.",
+    "Although there's also a car with lower confidence detected, traffic rules dictate that we must ensure adequate gaps when merging or changing lanes."
+  ],
+  "recommended_action": "Maintain current lane and speed while monitoring the bus to safely allow it to pass through. If there is an opportunity for a safe merge without cutting off traffic, do so with ample gap.",
+  "risk_level": "LOW",
+  "latency_ms": 22123.8,
+  "timestamp": "2026-03-17T01:47:30"
+}

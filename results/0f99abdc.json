@@ -1,0 +1,79 @@
+{
+  "id": "0f99abdc",
+  "image": "cabc30fc-eb673c5a.jpg",
+  "detections": [
+    {
+      "label": "truck",
+      "confidence": 0.782,
+      "box": [
+        0.4,
+        298.3,
+        276.5,
+        528.5
+      ]
+    },
+    {
+      "label": "car",
+      "confidence": 0.7,
+      "box": [
+        310.8,
+        403.6,
+        425.8,
+        481.9
+      ]
+    },
+    {
+      "label": "car",
+      "confidence": 0.62,
+      "box": [
+        431.5,
+        386.3,
+        598.6,
+        510.8
+      ]
+    },
+    {
+      "label": "car",
+      "confidence": 0.532,
+      "box": [
+        600.7,
+        419.3,
+        658.2,
+        462.2
+      ]
+    },
+    {
+      "label": "car",
+      "confidence": 0.453,
+      "box": [
+        702.0,
+        418.0,
+        733.9,
+        453.1
+      ]
+    }
+  ],
+  "rules_retrieved": [
+    {
+      "rule": "Emergency vehicles (ambulance, fire truck, police) with active lights/sirens must be yielded to immediately. Pull to the right and stop.",
+      "category": "vehicle",
+      "relevance": 0.414
+    },
+    {
+      "rule": "When merging or changing lanes, ensure adequate gap between vehicles. Do not cut off other drivers.",
+      "category": "vehicle",
+      "relevance": 0.395
+    },
+    {
+      "rule": "A green traffic light permits proceeding through the intersection, but you must still yield to vehicles and pedestrians already in the intersection.",
+      "category": "traffic_light",
+      "relevance": 0.394
+    }
+  ],
+  "scene_description": "A busy urban street with multiple cars of varying confidence levels detected alongside a truck.",
+  "agent_reasoning": "Given that there is no indication of an emergency vehicle, the primary concern should be maintaining safe following distances and yielding to pedestrians at crosswalks. The presence of several confidently identified vehicles suggests potential for close encounters or lane changes which must be managed carefully.",
+  "recommended_action": "Maintain a steady speed that is consistent with the flow of traffic, ensuring enough space from other cars while being prepared to stop at intersections and yielding as necessary. Stay vigilant for pedestrians crossing or about to cross the street.",
+  "risk_level": "LOW",
+  "latency_ms": 30462.2,
+  "timestamp": "2026-03-17T01:43:44"
+}
