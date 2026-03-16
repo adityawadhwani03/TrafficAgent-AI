@@ -1,0 +1,8 @@
+.venv/ 
+__pycache__/ 
+*.pyc 
+*.pyd 
+*.dll 
+yolo11n.pt 
+uploads/ 
+results/ 
