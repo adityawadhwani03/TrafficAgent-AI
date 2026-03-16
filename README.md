@@ -226,17 +226,4 @@ You get a public link like `https://abc123.ngrok-free.app` that anyone can open!
 
 ---
 
-## License
 
-MIT License — free to use for learning and building!
-
----
-
-## Author
-
-**Aditya Wadhwani**
-
-[![GitHub](https://img.shields.io/badge/GitHub-adityawadhwani03-black?logo=github)](https://github.com/adityawadhwani03)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Aditya%20Wadhwani-0077B5?logo=linkedin)](https://linkedin.com/in/adityawadhwani03)
-
-> Built as a fresher AI project | Stack: Python, FastAPI, YOLO, ChromaDB, Ollama, Phi-3 Mini
